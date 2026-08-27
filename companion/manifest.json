@@ -1,0 +1,39 @@
+{
+	"$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
+	"type": "connection",
+	"id": "lanternbird-cuecapture",
+	"name": "lanternbird-cuecapture",
+	"shortname": "CueCapture",
+	"description": "Control CueCapture recording, playback decks, mix mode, overlays, and meter panels — with full state feedback for Stream Deck and other surfaces.",
+	"version": "1.0.0",
+	"license": "MIT",
+	"repository": "git+https://github.com/bitfocus/companion-module-lanternbird-cuecapture.git",
+	"bugs": "https://github.com/bitfocus/companion-module-lanternbird-cuecapture/issues",
+	"maintainers": [
+		{
+			"name": "Lantern Bird",
+			"email": "support@cuecapture.com"
+		}
+	],
+	"runtime": {
+		"type": "node22",
+		"api": "nodejs-ipc",
+		"apiVersion": "0.0.0",
+		"entrypoint": "../dist/main.js"
+	},
+	"legacyIds": ["cuecapture"],
+	"manufacturer": "Lantern Bird",
+	"products": ["CueCapture"],
+	"keywords": [
+		"theatre",
+		"recording",
+		"playback",
+		"lighting",
+		"osc",
+		"eos",
+		"tech rehearsal",
+		"video",
+		"cue",
+		"cuecapture"
+	]
+}
