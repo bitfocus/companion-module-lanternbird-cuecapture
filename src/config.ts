@@ -55,10 +55,22 @@ export function GetConfigFields(): SomeCompanionConfigField[] {
 	]
 }
 
-export function parseInstanceId(raw: string | undefined): InstanceId {
+/**
+ * Resolve the Instance ID config field.
+ *
+ *  - empty / `broadcast` (case-insensitive, whitespace-tolerant) → `'broadcast'`
+ *  - a whole number 1–99 → that id
+ *  - anything else → `null`
+ *
+ * `null` means the field is invalid. Callers must surface that as a config
+ * error rather than widening to broadcast — a typo should never silently make
+ * the module talk to (and listen to) every CueCapture instance on the network.
+ */
+export function parseInstanceId(raw: string | undefined): InstanceId | null {
 	const trimmed = (raw ?? '').trim().toLowerCase()
 	if (trimmed === 'broadcast' || trimmed === '') return 'broadcast'
+	// Strict decimal digits only — rejects '1.0', '0x1', '1e0', '-1', etc.
+	if (!/^\d{1,2}$/.test(trimmed)) return null
 	const n = Number(trimmed)
-	if (Number.isInteger(n) && n >= 1 && n <= 99) return n
-	return 'broadcast'
+	return n >= 1 && n <= 99 ? n : null
 }

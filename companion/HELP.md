@@ -28,8 +28,10 @@ feedback ever lights up.
 | **Instance ID (1–99) or `broadcast`** | Matches CueCapture's OSC ID setting so several instances can share a network. `broadcast` targets and listens to every instance. | `1`         |
 
 If CueCapture runs on the same computer as Companion, leave the host at
-`127.0.0.1`. The two ports must differ. Anything other than a number in 1–99 (or
-an empty field) is treated as `broadcast`.
+`127.0.0.1`. The two ports must differ. An empty Instance ID field is treated as
+`broadcast`. Any other value that is not a whole number from 1 to 99 (or the word
+`broadcast`) is rejected: the connection shows a **Bad configuration** status and
+nothing is sent or received until the field is corrected.
 
 ### What you get
 

@@ -8,6 +8,7 @@
 //   - Dispatcher → AppState (every TX address category from the manual)
 //   - Path-form sibling messages don't clobber state from their arg-form parent
 //   - Instance-id filter rejects messages for other instances
+//   - Config Instance ID parsing (empty/broadcast → broadcast, 1–99 → id, else invalid)
 
 import { dirname, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -20,6 +21,7 @@ const { encodeMessage, decodePacket } = await import(distUrl('osc/codec.js'))
 const { buildRxAddress } = await import(distUrl('osc/address.js'))
 const { dispatchOscMessage } = await import(distUrl('osc/dispatcher.js'))
 const { createInitialState } = await import(distUrl('state.js'))
+const { parseInstanceId } = await import(distUrl('config.js'))
 
 let failures = 0
 function expect(name, actual, expected) {
@@ -31,6 +33,24 @@ function expect(name, actual, expected) {
 		failures++
 	}
 }
+
+console.log('--- Instance ID parsing ---')
+expect('empty → broadcast', parseInstanceId(''), 'broadcast')
+expect('undefined → broadcast', parseInstanceId(undefined), 'broadcast')
+expect('whitespace-only → broadcast', parseInstanceId('   '), 'broadcast')
+expect('"broadcast" mixed case + padding → broadcast', parseInstanceId('  BroadCast '), 'broadcast')
+expect('"1" → 1', parseInstanceId('1'), 1)
+expect('" 99 " → 99', parseInstanceId(' 99 '), 99)
+expect('"07" → 7', parseInstanceId('07'), 7)
+expect('"0" → invalid', parseInstanceId('0'), null)
+expect('"100" → invalid', parseInstanceId('100'), null)
+expect('"-1" → invalid', parseInstanceId('-1'), null)
+expect('"1.5" → invalid', parseInstanceId('1.5'), null)
+expect('"1.0" → invalid', parseInstanceId('1.0'), null)
+expect('"0x1" → invalid', parseInstanceId('0x1'), null)
+expect('"1e0" → invalid', parseInstanceId('1e0'), null)
+expect('"abc" → invalid', parseInstanceId('abc'), null)
+expect('"broadcast1" → invalid', parseInstanceId('broadcast1'), null)
 
 console.log('--- Address builder ---')
 expect('broadcast addr', buildRxAddress('broadcast', ['recording', 'start']), '/cuecapture/recording/start')

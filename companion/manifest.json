@@ -5,7 +5,7 @@
 	"name": "lanternbird-cuecapture",
 	"shortname": "CueCapture",
 	"description": "Control CueCapture recording, playback decks, mix mode, overlays, and meter panels — with full state feedback for Stream Deck and other surfaces.",
-	"version": "1.0.0",
+	"version": "0.0.0",
 	"license": "MIT",
 	"repository": "git+https://github.com/bitfocus/companion-module-lanternbird-cuecapture.git",
 	"bugs": "https://github.com/bitfocus/companion-module-lanternbird-cuecapture/issues",
@@ -21,7 +21,7 @@
 		"apiVersion": "0.0.0",
 		"entrypoint": "../dist/main.js"
 	},
-	"legacyIds": ["cuecapture"],
+	"legacyIds": [],
 	"manufacturer": "Lantern Bird",
 	"products": ["CueCapture"],
 	"keywords": [

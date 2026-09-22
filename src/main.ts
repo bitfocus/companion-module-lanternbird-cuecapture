@@ -30,6 +30,8 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 	private sender: OscSender | null = null
 	private receiver: OscReceiver | null = null
 	private flashTimer: NodeJS.Timeout | null = null
+	/** Resolved from config.instanceIdRaw; `null` while the field is invalid. */
+	private resolvedInstanceId: InstanceId | null = null
 
 	constructor(internal: unknown) {
 		super(internal)
@@ -51,15 +53,16 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 		this.updateVariableDefinitions()
 		updateVariablesFromState(this, this.state)
 
-		try {
-			await this.receiver.start()
-			this.updateStatus(InstanceStatus.Ok)
-		} catch (err) {
-			const m = err instanceof Error ? err.message : String(err)
-			this.updateStatus(InstanceStatus.ConnectionFailure, `RX bind failed: ${m}`)
+		if (this.applyInstanceId(config)) {
+			try {
+				await this.receiver.start()
+				this.updateStatus(InstanceStatus.Ok)
+			} catch (err) {
+				const m = err instanceof Error ? err.message : String(err)
+				this.updateStatus(InstanceStatus.ConnectionFailure, `RX bind failed: ${m}`)
+			}
+			this.sendIdentify()
 		}
-
-		this.sendIdentify()
 		this.startFlashTimer()
 	}
 
@@ -79,6 +82,12 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 		this.refreshAllFeedbacks()
 
 		this.sender?.updateTarget(config.host, config.txPort)
+		if (!this.applyInstanceId(config)) {
+			// No valid id → nothing we could correctly filter for. Stop listening
+			// until the user fixes the field.
+			this.receiver?.destroy()
+			return
+		}
 		try {
 			await this.receiver?.restart(config.rxPort)
 			this.updateStatus(InstanceStatus.Ok)
@@ -87,6 +96,23 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 			this.updateStatus(InstanceStatus.ConnectionFailure, `RX bind failed: ${m}`)
 		}
 		this.sendIdentify()
+	}
+
+	/**
+	 * Resolve the Instance ID field. An unparseable value is a config error and
+	 * is reported as BadConfig — it is NOT silently widened to broadcast.
+	 * Returns true when the id is usable.
+	 */
+	private applyInstanceId(config: ModuleConfig): boolean {
+		this.resolvedInstanceId = parseInstanceId(config.instanceIdRaw)
+		if (this.resolvedInstanceId === null) {
+			this.updateStatus(
+				InstanceStatus.BadConfig,
+				`Instance ID "${config.instanceIdRaw}" is not valid — use a whole number from 1 to 99, or "broadcast"`,
+			)
+			return false
+		}
+		return true
 	}
 
 	private refreshAllFeedbacks(): void {
@@ -114,16 +140,17 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 		UpdateVariableDefinitions(this)
 	}
 
-	instanceId(): InstanceId {
-		return parseInstanceId(this.config.instanceIdRaw)
-	}
-
 	/**
 	 * Build a `/cuecapture/{id}/...` address from path segments and fire it
 	 * with the supplied OSC args. Use empty `args` for verb-only commands.
 	 */
 	sendToApp(segments: readonly string[], args: readonly OscArg[] = []): void {
-		const addr = buildRxAddress(this.instanceId(), segments)
+		const id = this.resolvedInstanceId
+		if (id === null) {
+			this.log('warn', `Dropped /${segments.join('/')} — Instance ID config is invalid`)
+			return
+		}
+		const addr = buildRxAddress(id, segments)
 		this.sender?.send(addr, args)
 	}
 
@@ -138,11 +165,20 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 	 * themselves, or a non-CueCapture address they're aiming at the same host).
 	 */
 	sendRawAddress(address: string, args: readonly OscArg[] = []): void {
+		// Raw sends don't use the id, but the module is inert while its config
+		// is invalid — same rule as sendToApp, so behaviour matches HELP.md.
+		if (this.resolvedInstanceId === null) {
+			this.log('warn', `Dropped ${address} — Instance ID config is invalid`)
+			return
+		}
 		this.sender?.send(address, args)
 	}
 
 	private handleIncoming(msg: OscMessage): void {
-		const handled = dispatchOscMessage(this.state, msg, this.instanceId())
+		const id = this.resolvedInstanceId
+		// Receiver is torn down while the id is invalid, so this is belt-and-braces.
+		if (id === null) return
+		const handled = dispatchOscMessage(this.state, msg, id)
 		// Surface every received TX message at debug level so users can verify
 		// the wire flow without an external OSC monitor. (handled=false → either
 		// wrong instance id, or an address category we don't parse yet.)
