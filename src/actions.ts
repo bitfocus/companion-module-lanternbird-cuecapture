@@ -67,7 +67,7 @@ type DeckSlotOpts = { deck: DeckSlot }
 type DeckLetterOpts = { deck: DeckLetter }
 
 type Verb3 = 'show' | 'hide' | 'toggle'
-type RecVerb = 'start' | 'stop' | 'toggle'
+type RecVerb = 'start' | 'stop' | 'toggle' | 'pause' | 'resume' | 'togglepause'
 type PlayVerb = 'play' | 'pause' | 'toggle'
 type ChapterVerb = 'next' | 'previous'
 type ViewName = 'record' | 'playback'
@@ -113,6 +113,8 @@ export type ActionsSchema = {
 	settings_showname: { options: { name: string } }
 	settings_counter: { options: { value: number } }
 	settings_counter_reset: { options: EmptyOpts }
+	settings_showid: { options: { value: number } }
+	settings_showid_reset: { options: EmptyOpts }
 	settings_log_level: { options: { level: LogLevelName } }
 
 	shutdown_app: { options: EmptyOpts }
@@ -140,6 +142,7 @@ export type ActionsSchema = {
 	deck_rate_step: { options: DeckSlotOpts & { delta: number } }
 	deck_seek_step: { options: DeckSlotOpts & { deltaSeconds: number } }
 	settings_counter_step: { options: { delta: number } }
+	settings_showid_step: { options: { delta: number } }
 
 	// Mixer — per-output volume + mute. Output is 1-based (matches the UI's
 	// "Out 1".."Out N" labels). CueCapture clamps volume to [0, 2.0] (unity = 1.0).
@@ -210,6 +213,9 @@ const REC_VERB_CHOICES = [
 	{ id: 'start', label: 'Start' },
 	{ id: 'stop', label: 'Stop' },
 	{ id: 'toggle', label: 'Toggle' },
+	{ id: 'pause', label: 'Pause' },
+	{ id: 'resume', label: 'Resume' },
+	{ id: 'togglepause', label: 'Pause / Resume' },
 ] as const
 
 const PLAY_VERB_CHOICES = [
@@ -382,7 +388,9 @@ export function UpdateActions(self: ModuleInstance): void {
 		},
 
 		recording_verb: {
-			name: 'Recording: start / stop / toggle',
+			name: 'Recording: start / stop / toggle / pause / resume',
+			description:
+				'Toggle starts when idle, stops while recording, and resumes a paused recording. Pause / Resume pauses a running recording or resumes a paused one. Stop also ends a paused recording.',
 			options: [
 				{
 					id: 'verb',
@@ -832,6 +840,21 @@ export function UpdateActions(self: ModuleInstance): void {
 			callback: async () => self.sendToApp(['settings', 'counter', 'reset']),
 		},
 
+		settings_showid: {
+			name: 'Settings: show ID',
+			options: [{ id: 'value', type: 'number', label: 'Show ID', default: 0, min: 0, max: 100000 }],
+			callback: async (event) => {
+				const v = Math.max(0, Math.floor(Number(event.options['value'] ?? 0)))
+				self.sendToApp(['settings', 'set', 'showid'], [{ type: 'int', value: v }])
+			},
+		},
+
+		settings_showid_reset: {
+			name: 'Settings: reset show ID',
+			options: [],
+			callback: async () => self.sendToApp(['settings', 'showid', 'reset']),
+		},
+
 		settings_log_level: {
 			name: 'Settings: log level',
 			options: [
@@ -1092,6 +1115,25 @@ export function UpdateActions(self: ModuleInstance): void {
 			callback: async (event) => {
 				const delta = Math.trunc(Number(event.options['delta'] ?? 0))
 				self.sendToApp(['settings', 'counter', 'step'], [{ type: 'int', value: delta }])
+			},
+		},
+
+		settings_showid_step: {
+			name: 'Settings: show ID step (next show / rotary)',
+			options: [
+				{
+					id: 'delta',
+					type: 'number',
+					label: 'Delta (e.g. +1)',
+					default: 1,
+					min: -1000,
+					max: 1000,
+					step: 1,
+				},
+			],
+			callback: async (event) => {
+				const delta = Math.trunc(Number(event.options['delta'] ?? 0))
+				self.sendToApp(['settings', 'showid', 'step'], [{ type: 'int', value: delta }])
 			},
 		},
 

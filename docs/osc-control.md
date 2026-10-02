@@ -18,7 +18,7 @@ Turn it on under **Settings → Integrations → OSC**. The fields in that pane 
 | **OSC Integration** | off | Master enable. When off, no inbound commands are honored — neither UDP nor [Eos passthrough](#transports). The only safety gate. |
 | **OSC ID** | `1` | 1–99. Used in addresses like `/cuecapture/{ID}/...`. Omitting the id in an address **broadcasts** to every running CueCapture instance. |
 | **UDP RX Port** | `8001` | The UDP port CueCapture listens on, on every interface. Constrained to 1024–65535 (privileged ports excluded). |
-| **This Mac** | _resolved at open_ | The detected IPv4 address to use when configuring a sender. |
+| **This Computer** | _resolved at open_ | Every IPv4 address this computer can be reached on, one per line with its interface name. Point a sender at the address on the network it shares with this computer. |
 | **Use Eos Connection** | off | Forwards `/cuecapture/...` packets arriving over the active Eos TCP connection into the dispatcher. Locked off when Eos method is **Third Party OSC**; editable on **User TCP Port**. See [Transports](#transports). |
 | **Command Reference** | — | Inline rendered copy of the catalog below. |
 
@@ -64,7 +64,7 @@ Backslashes in path-form pass through; `\\` decodes to a single `\`.
 
 CueCapture accepts inbound OSC over two transports. Both feed the same dispatcher, so a given command works the same way no matter how it arrives.
 
-- **UDP** on the configured **RX Port** (default `8001`). Listens on **every interface** of the host. The "This Mac" line in the OSC settings panel shows the current IPv4 address you'd point a sender at.
+- **UDP** on the configured **RX Port** (default `8001`). Listens on **every interface** of the host. **This Computer** in the OSC settings panel lists each address the computer can be reached on, with its interface name — point a sender at the one on the network it shares with this computer.
 - **Eos console TCP passthrough.** When enabled, any `/cuecapture/...` packet sent over the active Eos OSC connection is forwarded into the dispatcher. Eos macros can drive CueCapture without configuring a second connection.
     - The toggle (**Use Eos Connection** in Settings → Integrations → OSC) is force-disabled and force-cleared while the Eos connection method is **Third Party OSC** — that channel is read-only for our addresses, so the console will not transmit a `/cuecapture/...` message over it.
     - On **User TCP Port**, the toggle is editable and stays at its persisted value. You have to opt in explicitly.
@@ -93,8 +93,11 @@ CueCapture accepts inbound OSC over two transports. Both feed the same dispatche
 | Address | Notes |
 |---|---|
 | `/cuecapture/{id}/recording/start` | No-op if already recording. |
-| `/cuecapture/{id}/recording/stop` | No-op if not recording. |
-| `/cuecapture/{id}/recording/toggle` | |
+| `/cuecapture/{id}/recording/stop` | No-op if not recording. Stops a paused recording too. |
+| `/cuecapture/{id}/recording/toggle` | Resumes a paused recording rather than stopping it. |
+| `/cuecapture/{id}/recording/pause` | Pause the recording. Refused when nothing is recording, when the recording is still starting, or when **Pause-capable recording** is off. |
+| `/cuecapture/{id}/recording/resume` | Resume a paused recording. |
+| `/cuecapture/{id}/recording/togglepause` | Pause if recording, resume if paused. |
 | `/cuecapture/{id}/recording/snapshot` | Save a snapshot of the live feed — camera plus overlays. |
 | `/cuecapture/{id}/recording/snapshot/no-overlays` | The camera as you've framed it, without the overlay graphics. |
 | `/cuecapture/{id}/recording/snapshot/raw` | The untouched camera frame at full source resolution. |
@@ -271,7 +274,7 @@ The Cue List panel's hamburger menu has a set of display toggles — show/hide s
 | `cues` | Cue rows (gates the five fields below) |
 | `number` | Cue number column |
 | `label` | Cue label column |
-| `time` | Cue start timecode |
+| `time` | Cue time column (fade time, counting down while the cue runs) |
 | `console-tc` | Eos console timecode |
 | `fade-bar` | Fade-duration bar |
 
@@ -318,10 +321,18 @@ The output count is dynamic — it follows the active deck's device-reachable ou
 | `/cuecapture/{id}/settings/set/counter/{N}` | — | Sets the file-naming counter to N. Clamped to ≥ 0. |
 | `/cuecapture/{id}/settings/set/counter` | `int N` | Arg form. |
 | `/cuecapture/{id}/settings/counter/step/{Δ}` | — | **Rotary-friendly.** Adds Δ to current counter, clamped ≥ 0. Path form accepts signed ints. |
-| `/cuecapture/{id}/settings/counter/step` | `int Δ` | Arg form. |
+| `/cuecapture/{id}/settings/counter/step` | `int Δ` | Arg form. A bare `…/counter/step` with no value is rejected. |
 | `/cuecapture/{id}/settings/counter/reset` | — | Resets counter to `CounterStart`. |
+| `/cuecapture/{id}/settings/set/showid/{N}` | — | Sets the show ID to N. Clamped to ≥ 0. |
+| `/cuecapture/{id}/settings/set/showid` | `int N` | Arg form. |
+| `/cuecapture/{id}/settings/showid/step/{Δ}` | — | Adds Δ to the show ID, clamped ≥ 0. Path form accepts signed ints. |
+| `/cuecapture/{id}/settings/showid/step` | `int Δ` | Arg form. A bare `…/showid/step` with no value means **+1**. |
+| `/cuecapture/{id}/settings/showid/reset` | — | Resets the show ID to its **start** value. |
 | `/cuecapture/{id}/settings/set/log-level/{level}` | — | Level: `verbose`, `debug`, `information`, `warning`, `error`, or `fatal`. Aliases: `info`, `warn`. |
 | `/cuecapture/{id}/settings/set/log-level` | `string level` | Arg form. |
+
+!!! note "Stepping the show ID and the counter"
+    A bare `…/showid/step` — no path segment and no argument — advances the show ID by one, so a single console button can mean "next show". A bare `…/counter/step` is rejected: the take counter advances on its own, so a step of it always states an amount. Nothing automatic moves the show ID; these addresses, the Settings row and the automation actions are the only things that change it.
 
 !!! note "Settings display refresh"
     An open Settings window does not refresh after these commands. Reopen it to
@@ -502,13 +513,13 @@ If you've enabled **Use Eos Connection** in Settings → Integrations → OSC (o
 
 Eos sends it over the existing TCP connection; CueCapture forwards it into the same dispatcher that handles UDP. No second connection needed.
 
-If you're on **Third Party OSC** (the default and recommended Eos connection), Eos won't transmit `/cuecapture/...` messages to us — point your macro at the UDP listener instead. The OSC settings panel shows your Mac's IP under "This Mac" so you know what address to put in the macro.
+If you're on **Third Party OSC** (the default and recommended Eos connection), Eos won't transmit `/cuecapture/...` messages to us — point your macro at the UDP listener instead. The OSC settings panel lists this computer's addresses under **This Computer** so you know what address to put in the macro — use the one on the network the console shares with this computer.
 
 ### Driving from Companion or qLab
 
 Companion and qLab both send OSC over UDP. Configure the destination as:
 
-- **Host** — the IP shown under **This Mac** in CueCapture's OSC settings (or `127.0.0.1` if Companion / qLab is running on the same Mac).
+- **Host** — the address listed under **This Computer** in CueCapture's OSC settings for the network the controller shares with this computer (or `127.0.0.1` if Companion / qLab is running on the same computer).
 - **Port** — the **UDP RX Port** in CueCapture's OSC settings (default `8001`).
 
 Then create a button or cue that sends the OSC address from the catalog above. Most controllers will let you put the address (e.g. `/cuecapture/1/recording/toggle`) in one field and any arguments in separate fields — that's the **arg form** described in [Free-text segments](#free-text-segments).
@@ -541,8 +552,11 @@ For **continuous / free-form values** (position, duration, filename, rate, cue t
 Stable state names so each Companion feedback pin maps to one durable state:
 
 - View: `"record"`, `"playback"`
-- Recording: `"recording"`, `"stopped"`, `"fault"`, `"idle"`
+- Recording: `"recording"`, `"paused"`, `"stopped"`, `"fault"`, `"idle"`
 - Deck transport: `"playing"`, `"paused"`, `"stopped"`
+
+A Companion module that does not know the `"paused"` recording state keeps showing
+the state it last received until the recording resumes or stops.
 
 ### Address catalog
 
@@ -553,14 +567,15 @@ Stable state names so each Companion feedback pin maps to one durable state:
 /out/view/record                           args: (none)
 /out/view/playback                         args: (none)
 
-/out/recording                             args: "recording" | "stopped" | "fault" | "idle"
+/out/recording                             args: "recording" | "paused" | "stopped" | "fault" | "idle"
 /out/recording/recording                   args: (none)
+/out/recording/paused                      args: (none)
 /out/recording/stopped                     args: (none)
 /out/recording/fault                       args: (none)
 /out/recording/idle                        args: (none)
 
 /out/recording/duration                    args: "00:01:23"
-/out/recording/duration/seconds            args: <double>           # 1 Hz while recording
+/out/recording/duration/seconds            args: <double>           # 1 Hz while recording; holds its value while paused
 
 /out/recording/last/state                  args: "stopped" | "fault"
 /out/recording/last/state/stopped          args: (none)
@@ -612,6 +627,7 @@ Stable state names so each Companion feedback pin maps to one durable state:
 
 /out/settings/showname                     args: "Production"
 /out/settings/counter                      args: <int>               # next recording number
+/out/settings/showid                       args: <int>               # current show ID
 /out/settings/log-level                    args: "Information"       # application log level
 /out/shutdown/computer-allowed             args: "true" | "false"    # mirror of the OSC safety gate
 ```
@@ -623,7 +639,7 @@ A full snapshot of the catalog is emitted whenever:
 1. A TX configuration is applied with TX enabled.
 2. CueCapture receives `/cuecapture/{id}/identify` or its broadcast form.
 
-Snapshot order: `identify` → `view` → `recording` → `recording/duration` (if recording) → `recording/last/*` (if a finished session exists) → each deck a–d in order (state, rate, cue, position, filename, mix block, follow block) → global Playback state (`active-deck`, `theatre`, `fullscreen`, panels, cue-list filters) → settings mirror (`showname`, `counter`, `log-level`, `shutdown/computer-allowed`) → mixer channels in order.
+Snapshot order: `identify` → `view` → `recording` → `recording/duration` (if recording) → `recording/last/*` (if a finished session exists) → each deck a–d in order (state, rate, cue, position, filename, mix block, follow block) → global Playback state (`active-deck`, `theatre`, `fullscreen`, panels, cue-list filters) → settings mirror (`showname`, `counter`, `showid`, `log-level`, `shutdown/computer-allowed`) → mixer channels in order.
 
 ### Cadence
 
@@ -650,4 +666,4 @@ To smoke-test on the same Mac without a Companion config:
 
 - **Settings → Integrations → OSC** — the field reference for everything that controls inbound OSC and the new TX section.
 - **Modules → Custom OSC** — the overlay module that receives slot text.
-- **Connecting to an Eos console** — the Eos TCP path that the **Use Eos Connection** toggle hooks into.
+- **Connecting to an Eos Console** — the Eos TCP path that the **Use Eos Connection** toggle hooks into.

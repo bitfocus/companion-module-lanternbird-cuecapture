@@ -45,7 +45,7 @@ function asDeckLetter(value: string): DeckLetter | null {
 	return DECK_LETTERS.includes(value as DeckLetter) ? (value as DeckLetter) : null
 }
 
-const RECORDING_STATES = new Set(['recording', 'stopped', 'fault', 'idle'])
+const RECORDING_STATES = new Set(['recording', 'paused', 'stopped', 'fault', 'idle'])
 const DECK_TRANSPORT_STATES = new Set(['playing', 'paused', 'stopped'])
 const PANEL_STATES = new Set(['expanded', 'collapsed'])
 const MIX_BLENDS = new Set(['normal', 'screen', 'lighten', 'difference'])
@@ -366,6 +366,10 @@ export function dispatchOscMessage(state: AppState, msg: OscMessage, wantedId: I
 		}
 		if (t1 === 'counter' && tail.length === 2) {
 			state.counter = asNumber(msg.args)
+			return true
+		}
+		if (t1 === 'showid' && tail.length === 2) {
+			state.showId = asNumber(msg.args)
 			return true
 		}
 		if (t1 === 'log-level' && tail.length === 2) {

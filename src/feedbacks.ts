@@ -8,7 +8,7 @@ import { combineRgb } from '@companion-module/base'
 import { DECK_LETTERS, DECK_SLOT_CHOICES, type DeckLetter, type DeckSlot } from './osc/address.js'
 import { CUELIST_FILTER_NAMES, resolveDeck, type CuelistFilterName } from './state.js'
 
-type RecState = 'recording' | 'stopped' | 'fault' | 'idle'
+type RecState = 'recording' | 'paused' | 'stopped' | 'fault' | 'idle'
 type LastRecState = 'stopped' | 'fault'
 type ViewName = 'record' | 'playback'
 type TransportState = 'playing' | 'paused' | 'stopped'
@@ -56,6 +56,7 @@ const BLACK = combineRgb(0, 0, 0)
 
 const REC_STATE_CHOICES = [
 	{ id: 'recording', label: 'Recording' },
+	{ id: 'paused', label: 'Paused' },
 	{ id: 'stopped', label: 'Stopped' },
 	{ id: 'fault', label: 'Fault' },
 	{ id: 'idle', label: 'Idle' },
@@ -521,6 +522,8 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 			},
 		],
 		callback: (feedback) => {
+			// Pulses only while capturing. A paused take is not capturing, so it stays
+			// dark too — pair with recording_state = paused for a steady paused style.
 			if (self.state.recordingState !== 'recording') return {}
 			const colorOn = Number(feedback.options['colorOn'] ?? RED)
 			const colorOff = Number(feedback.options['colorOff'] ?? DARK_RED)

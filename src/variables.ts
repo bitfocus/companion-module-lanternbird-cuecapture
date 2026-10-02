@@ -13,6 +13,7 @@ type GlobalVarNames =
 	| 'fullscreen_deck'
 	| 'showname'
 	| 'counter'
+	| 'show_id'
 	| 'log_level'
 	| 'last_recording_path'
 	| 'last_recording_duration'
@@ -80,7 +81,7 @@ export type VariablesSchema = Record<
 >
 
 const GLOBAL_DEFS: Record<GlobalVarNames, string> = {
-	recording_state: 'Recording state',
+	recording_state: 'Recording state (idle / recording / paused / stopped / fault)',
 	recording_duration: 'Recording duration (hh:mm:ss)',
 	recording_duration_seconds: 'Recording duration (seconds)',
 	view: 'Current view (record / playback)',
@@ -89,6 +90,7 @@ const GLOBAL_DEFS: Record<GlobalVarNames, string> = {
 	fullscreen_deck: 'Deck currently fullscreen (or empty)',
 	showname: 'Show name',
 	counter: 'File-naming counter',
+	show_id: 'Show ID',
 	log_level: 'Log level',
 	last_recording_path: 'Last recording: file path',
 	last_recording_duration: 'Last recording: duration (hh:mm:ss)',
@@ -252,6 +254,7 @@ export function updateVariablesFromState(self: ModuleInstance, state: AppState):
 		fullscreen_deck: state.fullscreenDeck ?? '',
 		showname: state.showname,
 		counter: state.counter ?? '',
+		show_id: state.showId ?? '',
 		log_level: state.logLevel,
 		last_recording_path: state.lastRecordingPath,
 		last_recording_duration: state.lastRecordingDuration,

@@ -4,7 +4,7 @@ Bitfocus Companion module for [**CueCapture**](https://cuecapture.com) — the
 macOS/Windows desktop app for theatrical tech-rehearsal recording with real-time
 cue overlays and cue-aware playback.
 
-Wraps CueCapture's full OSC control surface: recording start/stop, view
+Wraps CueCapture's full OSC control surface: recording start/stop/pause, view
 switching, per-deck playback transport (4 decks), mix mode (4 knobs per deck),
 theatre / fullscreen toggles, panel toggles, overlay master + per-module
 visibility, Custom OSC text slots, Meter Panel value pushing, and settings
@@ -55,8 +55,11 @@ Drop these on any button to get going. Organized into 10 browser sections.
 **Recording**
 
 - Record Toggle — flashes red while recording (uses the `recording_flash`
-  advanced feedback; period configurable per-button)
+  advanced feedback; period configurable per-button), holds amber while paused,
+  and resumes a paused recording when pressed
 - Record Start, Record Stop, Identify
+- Record Pause (lit amber while paused), Record Resume (lit red while recording),
+  Record Pause/Resume toggle
 
 **Views** — Switch to Record / Switch to Playback (lit when active)
 
@@ -74,7 +77,7 @@ focused on)
 **Playback panels** — Cuelist / Files / Timeline+Mixer toggle (lit when
 expanded)
 
-**Settings** — Counter reset
+**Settings** — Counter reset, Next show (show ID +1), Show ID reset
 
 **Shutdown** — Quit CueCapture app
 
@@ -99,7 +102,7 @@ for the canonical source of truth on what each address/state means.
 ```
 recording_state, recording_duration, recording_duration_seconds
 view, active_deck, theatre_deck, fullscreen_deck
-showname, counter, log_level
+showname, counter, show_id, log_level
 last_recording_{path,duration,state}
 identify_{id,version}
 

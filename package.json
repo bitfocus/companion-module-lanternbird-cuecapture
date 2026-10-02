@@ -1,6 +1,6 @@
 {
 	"name": "companion-module-lanternbird-cuecapture",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"description": "Bitfocus Companion module for CueCapture — recording, playback, mix mode, overlays, meter panels.",
 	"main": "dist/main.js",
 	"type": "module",

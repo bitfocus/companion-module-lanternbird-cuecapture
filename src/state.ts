@@ -1,6 +1,6 @@
 import { DECK_LETTERS, type DeckLetter } from './osc/address.js'
 
-export type RecordingState = 'recording' | 'stopped' | 'fault' | 'idle' | null
+export type RecordingState = 'recording' | 'paused' | 'stopped' | 'fault' | 'idle' | null
 export type DeckTransportState = 'playing' | 'paused' | 'stopped' | null
 export type ViewState = 'record' | 'playback' | null
 export type PanelState = 'expanded' | 'collapsed' | null
@@ -82,6 +82,7 @@ export interface AppState {
 	panelTimeline: PanelState
 	showname: string
 	counter: number | null
+	showId: number | null
 	logLevel: string
 	shutdownComputerAllowed: boolean | null
 	/** Keyed by 1-based channel number. Sparse — only channels CueCapture has
@@ -147,6 +148,7 @@ export function createInitialState(): AppState {
 		panelTimeline: null,
 		showname: '',
 		counter: null,
+		showId: null,
 		logLevel: '',
 		shutdownComputerAllowed: null,
 		mixerChannels: {},

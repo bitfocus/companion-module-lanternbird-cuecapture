@@ -1,2 +1,4 @@
 package.json
 /LICENSE.md
+# Verbatim copy of the CueCapture OSC spec — keep its upstream layout.
+docs/osc-control.md

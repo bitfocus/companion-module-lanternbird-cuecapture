@@ -63,9 +63,11 @@ export function UpdatePresets(self: ModuleInstance): void {
 	// ─── Recording ─────────────────────────────────────────────────────────
 	// Live duration as the label: empty while idle (so the icon stands alone)
 	// and ticks up while recording (with the red pulse overlaid by feedback).
+	// While paused the pulse stops and the button holds steady amber (the
+	// frozen duration stays on the label); a press resumes.
 	presets['rec_toggle'] = {
 		type: 'simple',
-		name: 'Record: Toggle (flashes red while recording, shows live duration)',
+		name: 'Record: Toggle (flashes red while recording, amber while paused, shows live duration)',
 		style: baseStyle('$(cuecapture:recording_duration)', DARK_BG, WHITE, 'record-dot'),
 		steps: [
 			{
@@ -77,6 +79,11 @@ export function UpdatePresets(self: ModuleInstance): void {
 			{
 				feedbackId: 'recording_flash',
 				options: { colorOn: RED, colorOff: DARK_RED, periodMs: 1000 },
+			},
+			{
+				feedbackId: 'recording_state',
+				options: { state: 'paused' },
+				style: { bgcolor: AMBER, color: BLACK },
 			},
 		],
 	}
@@ -99,6 +106,55 @@ export function UpdatePresets(self: ModuleInstance): void {
 				feedbackId: 'recording_state',
 				options: { state: 'recording' },
 				style: { bgcolor: RED_BRIGHT, color: WHITE },
+			},
+		],
+	}
+
+	// Pause / resume mirror the deck Play / Pause pair: Pause lights amber while
+	// paused, Resume lights red while recording, and the toggle shows both.
+	presets['rec_pause'] = {
+		type: 'simple',
+		name: 'Record: Pause (lit amber while paused)',
+		style: baseStyle('PAUSE', DARK_BG, AMBER, 'pause'),
+		steps: [{ down: [{ actionId: 'recording_verb', options: { verb: 'pause' } }], up: [] }],
+		feedbacks: [
+			{
+				feedbackId: 'recording_state',
+				options: { state: 'paused' },
+				style: { bgcolor: AMBER, color: BLACK },
+			},
+		],
+	}
+
+	presets['rec_resume'] = {
+		type: 'simple',
+		name: 'Record: Resume (lit red while recording)',
+		style: baseStyle('RESUME', DARK_BG, WHITE, 'record-dot'),
+		steps: [{ down: [{ actionId: 'recording_verb', options: { verb: 'resume' } }], up: [] }],
+		feedbacks: [
+			{
+				feedbackId: 'recording_state',
+				options: { state: 'recording' },
+				style: { bgcolor: RED, color: WHITE },
+			},
+		],
+	}
+
+	presets['rec_togglepause'] = {
+		type: 'simple',
+		name: 'Record: Pause / Resume toggle',
+		style: baseStyle('PAUSE\\nRESUME', DARK_BG, WHITE, 'toggle'),
+		steps: [{ down: [{ actionId: 'recording_verb', options: { verb: 'togglepause' } }], up: [] }],
+		feedbacks: [
+			{
+				feedbackId: 'recording_state',
+				options: { state: 'recording' },
+				style: { bgcolor: RED, color: WHITE },
+			},
+			{
+				feedbackId: 'recording_state',
+				options: { state: 'paused' },
+				style: { bgcolor: AMBER, color: BLACK },
 			},
 		],
 	}
@@ -127,9 +183,18 @@ export function UpdatePresets(self: ModuleInstance): void {
 				id: 'recording-main',
 				name: 'Main',
 				description:
-					'Record start / stop / toggle, live frame-grab snapshot, identify, and the flashing REC indicator.',
+					'Record start / stop / toggle, pause / resume, live frame-grab snapshot, identify, and the flashing REC indicator.',
 				type: 'simple',
-				presets: ['rec_toggle', 'rec_start', 'rec_stop', 'rec_snapshot', 'identify'],
+				presets: [
+					'rec_toggle',
+					'rec_start',
+					'rec_stop',
+					'rec_pause',
+					'rec_resume',
+					'rec_togglepause',
+					'rec_snapshot',
+					'identify',
+				],
 			},
 		],
 	})
@@ -556,6 +621,22 @@ export function UpdatePresets(self: ModuleInstance): void {
 		feedbacks: [],
 	}
 
+	presets['showid_next'] = {
+		type: 'simple',
+		name: 'Show ID: next show (+1, shows current ID)',
+		style: baseStyle('NEXT SHOW\\n$(cuecapture:show_id)', NEUTRAL, WHITE),
+		steps: [{ down: [{ actionId: 'settings_showid_step', options: { delta: 1 } }], up: [] }],
+		feedbacks: [],
+	}
+
+	presets['showid_reset'] = {
+		type: 'simple',
+		name: 'Show ID: reset to start value',
+		style: baseStyle('SHOW ID\\nRESET', NEUTRAL, WHITE),
+		steps: [{ down: [{ actionId: 'settings_showid_reset', options: {} }], up: [] }],
+		feedbacks: [],
+	}
+
 	structure.push({
 		id: 'settings',
 		name: 'Settings',
@@ -564,7 +645,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				id: 'settings-basic',
 				name: 'Settings shortcuts',
 				type: 'simple',
-				presets: ['counter_reset'],
+				presets: ['counter_reset', 'showid_next', 'showid_reset'],
 			},
 		],
 	})
@@ -608,6 +689,11 @@ export function UpdatePresets(self: ModuleInstance): void {
 				feedbackId: 'recording_state',
 				options: { state: 'recording' },
 				style: { bgcolor: RED, color: WHITE },
+			},
+			{
+				feedbackId: 'recording_state',
+				options: { state: 'paused' },
+				style: { bgcolor: AMBER, color: BLACK },
 			},
 			{
 				feedbackId: 'recording_state',
@@ -1250,6 +1336,27 @@ export function UpdatePresets(self: ModuleInstance): void {
 		feedbacks: [],
 	}
 
+	presets['rotary_showid'] = {
+		type: 'simple',
+		name: 'ROTARY show ID (press = reset)',
+		style: {
+			text: 'SHOW\\n$(cuecapture:show_id)',
+			size: 'auto',
+			color: WHITE,
+			bgcolor: NEUTRAL,
+			show_topbar: false,
+		},
+		steps: [
+			{
+				down: [{ actionId: 'settings_showid_reset', options: {} }],
+				up: [],
+				rotate_left: [{ actionId: 'settings_showid_step', options: { delta: -1 } }],
+				rotate_right: [{ actionId: 'settings_showid_step', options: { delta: 1 } }],
+			},
+		],
+		feedbacks: [],
+	}
+
 	// Rotary browser sections — one section per deck + a Global section.
 	for (const slot of DECK_UI_SLOTS) {
 		const full = deckFullLabel(slot)
@@ -1285,7 +1392,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				id: 'rotary-global-main',
 				name: 'Global rotary knobs',
 				type: 'simple',
-				presets: ['rotary_active_deck_cycle', 'rotary_counter'],
+				presets: ['rotary_active_deck_cycle', 'rotary_counter', 'rotary_showid'],
 			},
 		],
 	})
