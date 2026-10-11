@@ -384,5 +384,26 @@ export function dispatchOscMessage(state: AppState, msg: OscMessage, wantedId: I
 		return true
 	}
 
+	// /out/overlay/layout  "Act Two"   — the active layout's exact name.
+	// /out/overlay/layout/Act_Two      — its path twin, with whitespace and
+	//   OSC-reserved chars folded to `_`. Unlike the enum pairs above, this one
+	//   must NOT write state: it is lossy and arrives right after the arg form,
+	//   so it would overwrite "Act Two" with "Act_Two". Accepted, then ignored.
+	// /out/overlay/layouts "A" "Act Two" … — every name, in list order.
+	if (t0 === 'overlay') {
+		if (t1 === 'layout') {
+			if (tail.length === 2) {
+				const name = msg.args[0]
+				if (typeof name === 'string') state.overlayLayout = name
+				return true
+			}
+			if (tail.length === 3) return true
+		}
+		if (t1 === 'layouts' && tail.length === 2) {
+			state.overlayLayouts = msg.args.filter((a): a is string => typeof a === 'string')
+			return true
+		}
+	}
+
 	return false
 }

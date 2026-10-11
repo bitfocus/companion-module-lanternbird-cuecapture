@@ -32,6 +32,11 @@ export const MIXER_MAX_CHANNELS = 24
  *  variables/feedbacks alongside the numbered channels. */
 export const MIXER_MAIN_CHANNEL = 0
 
+/** How many overlay layout names get their own `overlay_layout_N` variable
+ *  (and Layout N preset). CueCapture publishes up to 64 names; the first 8
+ *  cover a Stream Deck row while keeping the variable list manageable. */
+export const OVERLAY_LAYOUT_SLOTS = 8
+
 export interface MixerChannelState {
 	volume: number | null
 	mute: MixerMuteState
@@ -91,6 +96,12 @@ export interface AppState {
 	/** Global cue-list panel display filters (scenes/cues/number/…/fade-bar).
 	 *  Each entry is null until CueCapture emits its initial value. */
 	cuelistFilters: Record<CuelistFilterName, CuelistFilterState>
+	/** The active overlay layout's exact name; null until CueCapture emits it. */
+	overlayLayout: string | null
+	/** Every overlay layout name in CueCapture's list order; null until the
+	 *  first list arrives. Can legitimately be empty — CueCapture sends the
+	 *  list with no args when not even the first name fits one datagram. */
+	overlayLayouts: string[] | null
 }
 
 export function createInitialMixerChannelState(): MixerChannelState {
@@ -153,6 +164,8 @@ export function createInitialState(): AppState {
 		shutdownComputerAllowed: null,
 		mixerChannels: {},
 		cuelistFilters: createInitialCuelistFilters(),
+		overlayLayout: null,
+		overlayLayouts: null,
 	}
 }
 
@@ -163,4 +176,38 @@ export function createInitialState(): AppState {
 export function resolveDeck(state: AppState, slot: DeckLetter | 'active'): DeckLetter | null {
 	if (slot === 'active') return state.activeDeck
 	return slot
+}
+
+/** .NET ordinal casing leaves these unmapped; JS uppercases them to ASCII I / S. */
+const ORDINAL_UNCASED = new Set(['ı', 'ſ'])
+
+/**
+ * A layout name as CueCapture compares it: trimmed, then .NET OrdinalIgnoreCase
+ * — a per-character simple uppercase. JS toUpperCase applies full mappings
+ * (ß → SS, ᾀ → ἈΙ), so a character whose uppercase expands is keyed by its
+ * lowercase instead, which folds ᾀ / ᾈ together as .NET does and leaves ß alone.
+ */
+function layoutNameKey(name: string): string {
+	let key = ''
+	for (const c of name.trim()) {
+		if (ORDINAL_UNCASED.has(c)) {
+			key += c
+			continue
+		}
+		const upper = c.toUpperCase()
+		key += upper.length === c.length ? upper : c.toLowerCase()
+	}
+	return key
+}
+
+/**
+ * True when `want` is the active overlay layout's name. Literal on purpose:
+ * the select verb also reads `_` as a space when no layout has that literal
+ * name, but the TX list can stop short (64 names, one datagram), so absence
+ * from it proves nothing — the fold could light a button that selects another
+ * layout.
+ */
+export function overlayLayoutIsActive(state: AppState, want: string): boolean {
+	const active = state.overlayLayout
+	return active !== null && want.trim() !== '' && layoutNameKey(active) === layoutNameKey(want)
 }
