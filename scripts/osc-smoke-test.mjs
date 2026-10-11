@@ -11,6 +11,9 @@
 //   - Config Instance ID parsing (empty/broadcast → broadcast, 1–99 → id, else invalid)
 //   - Recording pause/resume: verbs reach the wire, `paused` state drives feedbacks
 //   - Show ID: actions reach the wire, /out/settings/showid drives the variable
+//   - Overlay layouts: the select action sends the arg form, /out/overlay/layout
+//     (+ its lossy path twin) and /out/overlay/layouts drive state, the
+//     feedback, the variables and the list-order presets
 
 import { dirname, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -27,7 +30,7 @@ const { parseInstanceId } = await import(distUrl('config.js'))
 const { UpdateActions } = await import(distUrl('actions.js'))
 const { UpdateFeedbacks } = await import(distUrl('feedbacks.js'))
 const { UpdatePresets } = await import(distUrl('presets.js'))
-const { updateVariablesFromState } = await import(distUrl('variables.js'))
+const { updateVariablesFromState, UpdateVariableDefinitions } = await import(distUrl('variables.js'))
 
 let failures = 0
 function expect(name, actual, expected) {
@@ -271,15 +274,15 @@ const handled = dispatchOscMessage(state2, msg2, 7)
 expect('wrong instance id rejected', handled, false)
 expect('wrong instance id no state change', state2.recordingState, null)
 
-console.log('\n--- Pause / resume + show ID (actions, feedbacks, variables, presets) ---')
-{
-	// Stand-in for ModuleInstance with just the members these modules touch.
-	// sendToApp goes through the real address builder + codec, as main.ts does.
+// Stand-in for ModuleInstance with just the members these modules touch.
+// sendToApp goes through the real address builder + codec, as main.ts does.
+function makeInstance() {
 	const inst = {
 		state: createInitialState(),
 		sent: [],
 		actions: null,
 		feedbacks: null,
+		variableDefs: null,
 		variables: null,
 		presets: null,
 		sections: null,
@@ -292,6 +295,9 @@ console.log('\n--- Pause / resume + show ID (actions, feedbacks, variables, pres
 		setFeedbackDefinitions(defs) {
 			inst.feedbacks = defs
 		},
+		setVariableDefinitions(defs) {
+			inst.variableDefs = defs
+		},
 		setVariableValues(vals) {
 			inst.variables = vals
 		},
@@ -300,6 +306,12 @@ console.log('\n--- Pause / resume + show ID (actions, feedbacks, variables, pres
 			inst.presets = presets
 		},
 	}
+	return inst
+}
+
+console.log('\n--- Pause / resume + show ID (actions, feedbacks, variables, presets) ---')
+{
+	const inst = makeInstance()
 	UpdateActions(inst)
 	UpdateFeedbacks(inst)
 	UpdatePresets(inst)
@@ -427,6 +439,157 @@ console.log('\n--- Pause / resume + show ID (actions, feedbacks, variables, pres
 		'show ID presets listed',
 		[sectionPresets('settings').includes('showid_next'), sectionPresets('rotary-global').includes('rotary_showid')],
 		[true, true],
+	)
+}
+
+console.log('\n--- Overlay layouts (action, dispatcher, feedback, variables, presets) ---')
+{
+	const inst = makeInstance()
+	UpdateActions(inst)
+	UpdateFeedbacks(inst)
+	UpdatePresets(inst)
+	UpdateVariableDefinitions(inst)
+	const feed = (addr, args) => dispatchOscMessage(inst.state, decodePacket(encodeMessage(addr, args))[0], 1)
+	// A space and a slash: only the arg form can carry this name losslessly.
+	const NAME = 'Act Two / Finale'
+	// CueCapture's path-twin spelling of NAME: whitespace and `/` folded to `_`.
+	const TOKEN = 'Act_Two___Finale'
+
+	// Action — the ARG form, one string arg; never the /overlay/layout/{Name} path form.
+	const select = async (name) => {
+		inst.sent.length = 0
+		await inst.actions.overlay_layout_select.callback({ options: { name } })
+		return inst.sent.map((buf) => {
+			const [msg] = decodePacket(buf)
+			return { addr: msg.address, args: [...msg.args], tags: buf.toString('latin1').match(/,[a-zA-Z]*/)[0] }
+		})
+	}
+	expect('overlay_layout_select → arg form, name as one string arg', await select(NAME), [
+		{ addr: '/cuecapture/1/overlay/layout', args: [NAME], tags: ',s' },
+	])
+	expect('overlay_layout_select sends underscores verbatim', await select('Act_Two'), [
+		{ addr: '/cuecapture/1/overlay/layout', args: ['Act_Two'], tags: ',s' },
+	])
+	expect('overlay_layout_select sends nothing for a blank name', await select('   '), [])
+	expect(
+		'overlay_layout_select takes only a name (no fade option)',
+		inst.actions.overlay_layout_select.options.map((o) => o.id),
+		['name'],
+	)
+
+	// Dispatcher — /out/overlay/layout (+ path twin) and /out/overlay/layouts.
+	expect('overlay layout unknown before TX', [inst.state.overlayLayout, inst.state.overlayLayouts], [null, null])
+	expect('path twin alone is handled', feed(`/cuecapture/1/out/overlay/layout/${TOKEN}`, []), true)
+	expect('path twin alone sets nothing (lossy)', inst.state.overlayLayout, null)
+	// The pair in CueCapture's send order: arg form, then the path twin.
+	expect('/out/overlay/layout handled', feed('/cuecapture/1/out/overlay/layout', [NAME]), true)
+	feed(`/cuecapture/1/out/overlay/layout/${TOKEN}`, [])
+	expect('arg form sets the exact name; path twin does not fold it', inst.state.overlayLayout, NAME)
+	feed('/cuecapture/1/out/overlay/layout', [{ type: 'int', value: 2 }])
+	expect('non-string layout arg ignored', inst.state.overlayLayout, NAME)
+	const LIST = ['Layout 1', NAME, 'Act_Two', 'Act Two', 'Big Finale']
+	expect('/out/overlay/layouts handled', feed('/cuecapture/1/out/overlay/layouts', LIST), true)
+	expect('layout list kept in operator order', inst.state.overlayLayouts, LIST)
+	expect(
+		'layout for another instance rejected',
+		dispatchOscMessage(inst.state, decodePacket(encodeMessage('/cuecapture/2/out/overlay/layout', ['Layout 1']))[0], 1),
+		false,
+	)
+	expect('other instance leaves the name alone', inst.state.overlayLayout, NAME)
+
+	// Feedback — trimmed, case-insensitive (CueCapture's OrdinalIgnoreCase), and
+	// literal: no `_`-as-space fold, since the list may be cut short.
+	const active = (name) => inst.feedbacks.overlay_layout_active.callback({ options: { name } })
+	expect('feedback: exact name with space and slash', active(NAME), true)
+	expect('feedback: case-insensitive and trimmed', active('  act two / FINALE '), true)
+	expect('feedback: another layout', active('Layout 1'), false)
+	expect('feedback: blank name never matches', active(''), false)
+	feed('/cuecapture/1/out/overlay/layout', ['Act Two'])
+	expect('feedback: Act Two', active('Act Two'), true)
+	expect('feedback: Act_Two is a different layout name', active('Act_Two'), false)
+	// A truncated or unknown list must not make `_` read as a space either.
+	feed('/cuecapture/1/out/overlay/layouts', [])
+	expect('feedback: no `_` fold with an empty (truncated) list', active('Act_Two'), false)
+	// Per-character case folding, as .NET does: ß does not expand to SS.
+	feed('/cuecapture/1/out/overlay/layout', ['Straße'])
+	expect('feedback: Straße matches straße (UTF-8 through the codec)', active('straße'), true)
+	expect('feedback: Straße does not match STRASSE', active('STRASSE'), false)
+	feed('/cuecapture/1/out/overlay/layout', ['Kırmızı ᾀ'])
+	expect(
+		'feedback: .NET ordinal casing — dotless ı stays distinct, ᾀ folds with ᾈ',
+		[active('kırmızı ᾈ'), active('Kirmizi ᾀ')],
+		[true, false],
+	)
+	expect(
+		'action and feedback names parse Companion variables',
+		[
+			inst.actions.overlay_layout_select.options[0].useVariables,
+			inst.feedbacks.overlay_layout_active.options[0].useVariables,
+		],
+		[true, true],
+	)
+	feed('/cuecapture/1/out/overlay/layouts', LIST)
+	feed('/cuecapture/1/out/overlay/layout', ['Act Two'])
+
+	// Variables.
+	updateVariablesFromState(inst, inst.state)
+	const v = () => inst.variables
+	expect(
+		'overlay layout variables',
+		[v().overlay_layout, v().overlay_layout_count, v().overlay_layout_1, v().overlay_layout_2, v().overlay_layout_5],
+		['Act Two', 5, 'Layout 1', NAME, 'Big Finale'],
+	)
+	expect('overlay_layout_N past the end of the list is blank', [v().overlay_layout_6, v().overlay_layout_8], ['', ''])
+	expect(
+		'overlay_layout_1..8 declared, no 9th',
+		[...Array(8).keys()].every((i) => `overlay_layout_${i + 1}` in inst.variableDefs) &&
+			!('overlay_layout_9' in inst.variableDefs) &&
+			'overlay_layout' in inst.variableDefs &&
+			'overlay_layout_count' in inst.variableDefs,
+		true,
+	)
+	// CueCapture sends the list with no args when not even the first name fits
+	// one datagram — a real (empty) list, not "unknown".
+	feed('/cuecapture/1/out/overlay/layouts', [])
+	updateVariablesFromState(inst, inst.state)
+	expect('empty layout list → count 0, slots blank', [v().overlay_layout_count, v().overlay_layout_1], [0, ''])
+	const fresh = makeInstance()
+	updateVariablesFromState(fresh, fresh.state)
+	expect(
+		'before any TX: name and count blank',
+		[fresh.variables.overlay_layout, fresh.variables.overlay_layout_count],
+		['', ''],
+	)
+
+	// Presets.
+	const p = inst.presets
+	const slot = p['overlay_layout_slot_3']
+	expect(
+		'list preset: label, action and feedback all follow overlay_layout_3',
+		[slot.style.text, slot.steps[0].down[0], slot.feedbacks[0].feedbackId, slot.feedbacks[0].options],
+		[
+			'$(cuecapture:overlay_layout_3)',
+			{ actionId: 'overlay_layout_select', options: { name: '$(cuecapture:overlay_layout_3)' } },
+			'overlay_layout_active',
+			{ name: '$(cuecapture:overlay_layout_3)' },
+		],
+	)
+	const byName = p['overlay_layout_by_name']
+	expect(
+		'by-name preset: action and feedback name the same layout',
+		[byName.steps[0].down[0].options.name, byName.feedbacks[0].options.name],
+		['Layout 1', 'Layout 1'],
+	)
+	const listed = inst.sections.find((s) => s.id === 'overlay-layouts').definitions.flatMap((d) => d.presets)
+	expect('overlay layouts section lists the 8 list presets, by-name and readout', listed, [
+		...[...Array(8).keys()].map((i) => `overlay_layout_slot_${i + 1}`),
+		'overlay_layout_by_name',
+		'overlay_layout_readout',
+	])
+	expect(
+		'every listed overlay layout preset is defined',
+		listed.every((id) => id in p),
+		true,
 	)
 }
 

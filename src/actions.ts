@@ -122,6 +122,7 @@ export type ActionsSchema = {
 
 	overlay: { options: { verb: Verb3 } }
 	overlay_module: { options: { moduleName: string; verb: Verb3 } }
+	overlay_layout_select: { options: { name: string } }
 	overlay_slot_text: { options: { slot: number; line: number; text: string } }
 	overlay_slot_clear: { options: { slot: number; line: number } }
 
@@ -930,6 +931,28 @@ export function UpdateActions(self: ModuleInstance): void {
 				// Module name goes on the address; replace spaces with underscores per spec.
 				const safe = name.replace(/\s+/g, '_')
 				self.sendToApp(['overlay', 'module', safe, verb])
+			},
+		},
+
+		// Arg form, never the /overlay/layout/{Name} path form: the name rides as
+		// one OSC string, so spaces, slashes and underscores arrive exactly as typed.
+		overlay_layout_select: {
+			name: 'Overlay layout: select (by name)',
+			description:
+				'Switches the overlay to a saved layout. CueCapture changes nothing without an Overlay Layouts license, for a name that matches no layout, or while a layout edit is in progress — use the "Overlay layout: matches" feedback to see what is on screen.',
+			options: [
+				{
+					id: 'name',
+					type: 'textinput',
+					label: 'Layout name (exact; spaces / slashes OK)',
+					default: '',
+					useVariables: true,
+				},
+			],
+			callback: async (event) => {
+				const name = String(event.options['name'] ?? '')
+				if (name.trim().length === 0) return
+				self.sendToApp(['overlay', 'layout'], [name])
 			},
 		},
 

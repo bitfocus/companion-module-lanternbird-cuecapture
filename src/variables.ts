@@ -1,6 +1,13 @@
 import { DECK_LETTERS, type DeckLetter } from './osc/address.js'
 import type ModuleInstance from './main.js'
-import { CUELIST_FILTER_NAMES, MIXER_MAIN_CHANNEL, MIXER_MAX_CHANNELS, type AppState, type DeckState } from './state.js'
+import {
+	CUELIST_FILTER_NAMES,
+	MIXER_MAIN_CHANNEL,
+	MIXER_MAX_CHANNELS,
+	OVERLAY_LAYOUT_SLOTS,
+	type AppState,
+	type DeckState,
+} from './state.js'
 import type { CompanionVariableDefinitions } from '@companion-module/base'
 
 type GlobalVarNames =
@@ -40,6 +47,8 @@ type GlobalVarNames =
 	| 'active_deck_follow_mode'
 	| 'active_deck_follow_out_of_sync'
 	| 'active_deck_follow_list'
+	| 'overlay_layout'
+	| 'overlay_layout_count'
 
 type DeckVarNames<L extends DeckLetter> =
 	| `deck_${L}_state`
@@ -75,8 +84,11 @@ type MixerVarNames = `mixer_channel_${number}_volume` | `mixer_channel_${number}
 // keys (Companion variable names can't contain hyphens).
 type CuelistFilterVarNames = `cuelist_filter_${string}`
 
+// overlay_layout_1..OVERLAY_LAYOUT_SLOTS — the first names of CueCapture's layout list.
+type OverlayLayoutVarNames = `overlay_layout_${number}`
+
 export type VariablesSchema = Record<
-	GlobalVarNames | DeckVarNames<DeckLetter> | MixerVarNames | CuelistFilterVarNames,
+	GlobalVarNames | DeckVarNames<DeckLetter> | MixerVarNames | CuelistFilterVarNames | OverlayLayoutVarNames,
 	string | number
 >
 
@@ -117,6 +129,8 @@ const GLOBAL_DEFS: Record<GlobalVarNames, string> = {
 	active_deck_follow_mode: 'Active deck mirror: Follow Console mode (start/end)',
 	active_deck_follow_out_of_sync: 'Active deck mirror: Follow Console out-of-sync fallback on/off',
 	active_deck_follow_list: 'Active deck mirror: Follow Console custom list # (empty when unset)',
+	overlay_layout: 'Overlay layout: active layout name',
+	overlay_layout_count: 'Overlay layout: number of layout names received (at most 64)',
 }
 
 function deckDefs(letter: DeckLetter): Record<string, string> {
@@ -171,6 +185,9 @@ export function UpdateVariableDefinitions(self: ModuleInstance): void {
 	}
 	for (const name of CUELIST_FILTER_NAMES) {
 		defs[filterVarKey(name)] = { name: `Cue list filter "${name}" (shown/hidden)` }
+	}
+	for (let n = 1; n <= OVERLAY_LAYOUT_SLOTS; n++) {
+		defs[`overlay_layout_${n}`] = { name: `Overlay layout ${n}: name (list order; empty past the end)` }
 	}
 	self.setVariableDefinitions(defs as unknown as CompanionVariableDefinitions<VariablesSchema>)
 }
@@ -281,6 +298,8 @@ export function updateVariablesFromState(self: ModuleInstance, state: AppState):
 		active_deck_follow_mode: activeDeck?.followMode ?? '',
 		active_deck_follow_out_of_sync: activeDeck?.followOutOfSync ?? '',
 		active_deck_follow_list: activeDeck?.followList ?? '',
+		overlay_layout: state.overlayLayout ?? '',
+		overlay_layout_count: state.overlayLayouts?.length ?? '',
 	}
 	for (const letter of DECK_LETTERS) {
 		Object.assign(vals, deckValues(letter, state.decks[letter]))
@@ -292,6 +311,9 @@ export function updateVariablesFromState(self: ModuleInstance, state: AppState):
 	}
 	for (const name of CUELIST_FILTER_NAMES) {
 		vals[filterVarKey(name)] = state.cuelistFilters[name] ?? ''
+	}
+	for (let n = 1; n <= OVERLAY_LAYOUT_SLOTS; n++) {
+		vals[`overlay_layout_${n}`] = state.overlayLayouts?.[n - 1] ?? ''
 	}
 	self.setVariableValues(vals)
 }

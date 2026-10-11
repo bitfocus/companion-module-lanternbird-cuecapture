@@ -9,6 +9,7 @@ import type {
 import { combineRgb } from '@companion-module/base'
 import { DECK_LETTERS, type DeckLetter } from './osc/address.js'
 import { tryLoadIcon } from './icons.js'
+import { OVERLAY_LAYOUT_SLOTS } from './state.js'
 
 // ─── Palette (matches the icon set; in feedbacks.ts the same colors drive
 // default feedback styling).
@@ -24,6 +25,7 @@ const CYAN = combineRgb(20, 180, 200)
 const PURPLE = combineRgb(120, 80, 200)
 const ORANGE = combineRgb(220, 110, 30)
 const PINK = combineRgb(220, 60, 140)
+const TEAL = combineRgb(0, 140, 120)
 const WHITE = combineRgb(255, 255, 255)
 const BLACK = combineRgb(0, 0, 0)
 const DARK_BG = combineRgb(20, 20, 20)
@@ -238,6 +240,76 @@ export function UpdatePresets(self: ModuleInstance): void {
 				name: 'Switch view',
 				type: 'simple',
 				presets: ['view_record', 'view_playback'],
+			},
+		],
+	})
+
+	// ─── Overlay layouts ───────────────────────────────────────────────────
+	// Same shape as the view buttons: dark default, lit teal while the layout
+	// is on screen. The by-name button is the template — retype the name on
+	// its action, feedback and label. The numbered buttons need no editing:
+	// each takes its name from overlay_layout_N, so it follows the Nth layout
+	// in CueCapture's list and shows that name (blank past the end of the list).
+	presets['overlay_layout_by_name'] = {
+		type: 'simple',
+		name: 'Overlay layout: select by name (edit the name on the action, feedback and label)',
+		style: baseStyle('Layout 1', BLACK, WHITE),
+		steps: [{ down: [{ actionId: 'overlay_layout_select', options: { name: 'Layout 1' } }], up: [] }],
+		feedbacks: [
+			{
+				feedbackId: 'overlay_layout_active',
+				options: { name: 'Layout 1' },
+				style: { bgcolor: TEAL, color: WHITE },
+			},
+		],
+	}
+
+	presets['overlay_layout_readout'] = {
+		type: 'simple',
+		name: 'Overlay layout: active layout name',
+		style: baseStyle('LAYOUT\\n$(cuecapture:overlay_layout)', BLACK, WHITE),
+		steps: [],
+		feedbacks: [],
+	}
+
+	const overlayLayoutSlotPresets: string[] = []
+	for (let n = 1; n <= OVERLAY_LAYOUT_SLOTS; n++) {
+		const id = `overlay_layout_slot_${n}`
+		const name = `$(cuecapture:overlay_layout_${n})`
+		presets[id] = {
+			type: 'simple',
+			name: `Overlay layout ${n}: select layout #${n} in the list (shows its name)`,
+			style: baseStyle(name, BLACK, WHITE),
+			steps: [{ down: [{ actionId: 'overlay_layout_select', options: { name } }], up: [] }],
+			feedbacks: [
+				{
+					feedbackId: 'overlay_layout_active',
+					options: { name },
+					style: { bgcolor: TEAL, color: WHITE },
+				},
+			],
+		}
+		overlayLayoutSlotPresets.push(id)
+	}
+
+	structure.push({
+		id: 'overlay-layouts',
+		name: 'Overlay layouts',
+		definitions: [
+			{
+				id: 'overlay-layout-list',
+				name: 'Layouts in list order',
+				description:
+					"Each button selects the layout at its position in CueCapture's layout list, shows its name, and lights while it is on screen. Reordering the layouts in CueCapture moves the names with them.",
+				type: 'simple',
+				presets: overlayLayoutSlotPresets,
+			},
+			{
+				id: 'overlay-layout-named',
+				name: 'By name',
+				description: 'Select one layout by its exact name, and show which layout is on screen.',
+				type: 'simple',
+				presets: ['overlay_layout_by_name', 'overlay_layout_readout'],
 			},
 		],
 	})

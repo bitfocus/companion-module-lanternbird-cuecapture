@@ -39,10 +39,10 @@ nothing is sent or received until the field is corrected.
 pause/resume, live frame-grab snapshots, per-deck transport
 (play/pause/stop/jog/rate), Mix Mode with opacity/gain/threshold/blend, theatre and
 fullscreen view targeting, cue-list navigation and filters, Follow Console,
-playback-mixer channel and main volume/mute, panel show/hide, settings (show name,
-file counter, show ID, log level), and app shutdown. Deck-targeted actions accept
-`a`/`b`/`c`/`d` or **active**, which resolves to whichever deck CueCapture
-currently has focused.
+playback-mixer channel and main volume/mute, panel show/hide, overlay layouts,
+settings (show name, file counter, show ID, log level), and app shutdown.
+Deck-targeted actions accept `a`/`b`/`c`/`d` or **active**, which resolves to
+whichever deck CueCapture currently has focused.
 
 Rotary-capable actions (jog, rate, opacity, gain, threshold, mixer volume, file
 counter, show ID) come in step and cycle variants for Stream Deck + dials and
@@ -68,6 +68,21 @@ camera as you framed it — rotation, crop and zoom applied — with no overlay
 modules drawn), or **Raw camera** (the untouched source frame). This is the
 record-side grab; the separate **Deck: snapshot** action targets a playback deck.
 
+**Overlay layouts.** **Overlay layout: select (by name)** switches CueCapture's
+overlay to one of its saved layouts. Type the layout's exact name — spaces and
+slashes are fine, and case doesn't matter. The **Overlay layout: matches**
+feedback lights while that layout is on screen, and the `overlay_layout` variable
+holds the name of the one showing. `overlay_layout_count` and `overlay_layout_1` …
+`overlay_layout_8` mirror CueCapture's layout list in its order; the **Overlay
+layouts** presets use them for a row of buttons that each select the layout at
+one position and show its name, so they need no editing. CueCapture sends at
+most 64 names, and only as many as fit one network message, so with very many or
+very long names the list — and the count — stops short. CueCapture changes
+nothing — and sends no reply — without an **Overlay Layouts** license, for a name
+that matches no layout, or while a layout is being edited; the feedback is how
+you confirm a switch. The crossfade comes from the layout itself, set in
+CueCapture.
+
 A **Send custom** action is included as an escape hatch — type any OSC address and
 arguments by hand for verbs this module doesn't wrap yet, including mixer channels
 above the pre-declared readout limit.
@@ -75,10 +90,11 @@ above the pre-declared readout limit.
 **Feedbacks** are mostly boolean state matches — recording state (including
 paused), current view, deck transport state, Mix on/off and blend mode,
 active/theatre/fullscreen deck, panel visibility, mixer mute, Follow Console state
-and sync, and cue-list filter. Recording flash is an advanced feedback that pulses
-on a 250 ms timer while recording. It does not pulse while paused, because nothing
-is being captured — add a **Recording: state matches → Paused** feedback for a
-steady paused style, as the Record Toggle preset does (amber).
+and sync, cue-list filter, and the active overlay layout. Recording flash is an
+advanced feedback that pulses on a 250 ms timer while recording. It does not pulse
+while paused, because nothing is being captured — add a **Recording: state
+matches → Paused** feedback for a steady paused style, as the Record Toggle preset
+does (amber).
 
 **Variables** mirror CueCapture's state: recording status (`idle`, `recording`,
 `paused`, `stopped`, `fault`) and duration — which holds its value while paused —
@@ -86,11 +102,12 @@ show name, file counter, show ID, per-deck position (a formatted string plus spl
 `hh`/`mm`/`ss`/`ff` parts and raw seconds), filename, cue title and index, rate,
 Mix parameters, and Follow Console state. Every per-deck variable also exists in an
 `active_deck_*` form that tracks the focused deck. Playback-mixer levels are
-exposed per channel as percentages.
+exposed per channel as percentages. The active overlay layout and the first eight
+names of the layout list have their own variables.
 
-**Presets** ship across a dozen browser categories — Recording, Playback panels,
-Active deck nav, Cue list filters, Mixer, Rotary knobs, Live readout buttons,
-Settings shortcuts, and more.
+**Presets** ship across a dozen browser categories — Recording, Overlay layouts,
+Playback panels, Active deck nav, Cue list filters, Mixer, Rotary knobs, Live
+readout buttons, Settings shortcuts, and more.
 
 ### Notes
 

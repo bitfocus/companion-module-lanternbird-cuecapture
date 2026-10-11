@@ -6,7 +6,7 @@ import type {
 } from '@companion-module/base'
 import { combineRgb } from '@companion-module/base'
 import { DECK_LETTERS, DECK_SLOT_CHOICES, type DeckLetter, type DeckSlot } from './osc/address.js'
-import { CUELIST_FILTER_NAMES, resolveDeck, type CuelistFilterName } from './state.js'
+import { CUELIST_FILTER_NAMES, overlayLayoutIsActive, resolveDeck, type CuelistFilterName } from './state.js'
 
 type RecState = 'recording' | 'paused' | 'stopped' | 'fault' | 'idle'
 type LastRecState = 'stopped' | 'fault'
@@ -43,6 +43,7 @@ export type FeedbacksSchema = {
 		type: 'boolean'
 		options: { name: CuelistFilterName; state: CuelistFilterStateName }
 	}
+	overlay_layout_active: { type: 'boolean'; options: { name: string } }
 	recording_flash: {
 		type: 'advanced'
 		options: { colorOn: number; colorOff: number; periodMs: number }
@@ -505,6 +506,25 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		},
 	}
 
+	const overlayLayoutActive: CompanionBooleanFeedbackDefinition = {
+		name: 'Overlay layout: matches (by name)',
+		type: 'boolean',
+		defaultStyle: { bgcolor: combineRgb(0, 140, 120), color: WHITE },
+		options: [
+			{
+				id: 'name',
+				type: 'textinput',
+				label: 'Layout name (case-insensitive)',
+				default: '',
+				useVariables: true,
+			},
+		],
+		callback: (feedback) => {
+			const want = feedback.options['name']
+			return typeof want === 'string' && overlayLayoutIsActive(self.state, want)
+		},
+	}
+
 	const recordingFlash: CompanionAdvancedFeedbackDefinition = {
 		name: 'Recording: pulse (advanced — flashing background)',
 		type: 'advanced',
@@ -552,6 +572,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		deck_follow_mode_is: deckFollowModeIs,
 		deck_follow_out_of_sync_on: deckFollowOutOfSyncOn,
 		cuelist_filter_is: cuelistFilterIs,
+		overlay_layout_active: overlayLayoutActive,
 		recording_flash: recordingFlash,
 	}
 	self.setFeedbackDefinitions(defs as unknown as CompanionFeedbackDefinitions<FeedbacksSchema>)
@@ -577,5 +598,6 @@ export const ALL_FEEDBACK_IDS = [
 	'deck_follow_mode_is',
 	'deck_follow_out_of_sync_on',
 	'cuelist_filter_is',
+	'overlay_layout_active',
 	'recording_flash',
 ] as const satisfies ReadonlyArray<keyof FeedbacksSchema>
