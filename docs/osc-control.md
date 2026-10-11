@@ -2,8 +2,8 @@
 
 # OSC Control Spec
 
-CueCapture accepts OSC commands for recording, playback, overlay visibility, and
-on-screen text. It can also send optional state feedback to a remote controller.
+CueCapture accepts OSC commands for recording, playback, overlay visibility,
+overlay layouts, and on-screen text. It can also send optional state feedback to a remote controller.
 
 A condensed command reference is available under **Settings → Integrations → OSC
 → Command Reference**. This page is the complete reference. See
@@ -19,7 +19,7 @@ Turn it on under **Settings → Integrations → OSC**. The fields in that pane 
 | **OSC ID** | `1` | 1–99. Used in addresses like `/cuecapture/{ID}/...`. Omitting the id in an address **broadcasts** to every running CueCapture instance. |
 | **UDP RX Port** | `8001` | The UDP port CueCapture listens on, on every interface. Constrained to 1024–65535 (privileged ports excluded). |
 | **This Computer** | _resolved at open_ | Every IPv4 address this computer can be reached on, one per line with its interface name. Point a sender at the address on the network it shares with this computer. |
-| **Use Eos Connection** | off | Forwards `/cuecapture/...` packets arriving over the active Eos TCP connection into the dispatcher. Locked off when Eos method is **Third Party OSC**; editable on **User TCP Port**. See [Transports](#transports). |
+| **Eos Passthrough** | off | Also accepts `/cuecapture/...` packets arriving over the active Eos TCP connection. On Eos 3.3.9 or newer with **Third Party OSC**, this is the whole setup for driving CueCapture from an Eos macro. Available with **User TCP Port**, or **Third Party OSC** on port 3038; grayed on port 3037. See [Transports](#transports). |
 | **Command Reference** | — | Inline rendered copy of the catalog below. |
 
 !!! warning "UDP is unauthenticated"
@@ -64,10 +64,10 @@ Backslashes in path-form pass through; `\\` decodes to a single `\`.
 
 CueCapture accepts inbound OSC over two transports. Both feed the same dispatcher, so a given command works the same way no matter how it arrives.
 
-- **UDP** on the configured **RX Port** (default `8001`). Listens on **every interface** of the host. **This Computer** in the OSC settings panel lists each address the computer can be reached on, with its interface name — point a sender at the one on the network it shares with this computer.
-- **Eos console TCP passthrough.** When enabled, any `/cuecapture/...` packet sent over the active Eos OSC connection is forwarded into the dispatcher. Eos macros can drive CueCapture without configuring a second connection.
-    - The toggle (**Use Eos Connection** in Settings → Integrations → OSC) is force-disabled and force-cleared while the Eos connection method is **Third Party OSC** — that channel is read-only for our addresses, so the console will not transmit a `/cuecapture/...` message over it.
-    - On **User TCP Port**, the toggle is editable and stays at its persisted value. You have to opt in explicitly.
+- **UDP** on the configured **RX Port** (default `8001`). The general-purpose transport: Companion, qLab, TouchOSC, and Eos macros on consoles older than 3.3.9 send here. Listens on **every interface** of the host. **This Computer** in the OSC settings panel lists each address the computer can be reached on, with its interface name — point a sender at the one on the network it shares with this computer.
+- **Eos console TCP passthrough.** Eos 3.3.9 or newer: no second connection needed. With **Eos Passthrough** on, any `/cuecapture/...` packet the console sends over the active Eos OSC connection is forwarded into the dispatcher, so an Eos macro drives CueCapture over the connection you already have.
+    - The toggle (**Eos Passthrough** in Settings → Integrations → OSC) is available with **User TCP Port**, or with **Third Party OSC** on port **3038** (Eos 3.3.9 or newer). On Third Party OSC with port 3037 it is grayed — that port does not carry the console's custom OSC strings, so the console will not transmit a `/cuecapture/...` message over it.
+    - The toggle keeps its value across method changes, and you have to opt in explicitly. It takes effect only while the live connection is on a port that carries custom OSC: if a 3038 connection falls back to 3037, passthrough is inactive until the next connection on 3038.
 
 ---
 
@@ -355,15 +355,30 @@ When master is **hidden**, no overlay modules render. The camera passthrough is 
 | `/cuecapture/{id}/overlay/hide` |
 | `/cuecapture/{id}/overlay/toggle` |
 
-### Per-module visibility
+### Per-module visibility {#per-module-visibility}
 
-Match by the **Module Name** as set in the Modules panel. Case-insensitive and whitespace-trimmed. Module names containing spaces can be addressed by substituting `_` for each space — e.g. a module named `Show Notes` matches `/cuecapture/1/overlay/module/Show_Notes/hide`. The literal segment is tried first, so a module whose actual name contains an underscore still wins. Silent no-op if no module matches.
+Match by the **Module Name** as set in the Modules panel. Case-insensitive and whitespace-trimmed. Module names containing spaces can be addressed by substituting `_` for each space — e.g. a module named `Show Notes` matches `/cuecapture/1/overlay/module/Show_Notes/hide`. The literal segment is tried first, so a module whose actual name contains an underscore still wins; failing both, the segment is tried as a module ID — copy it from the module's right-click menu; unlike the name, it survives a rename. If nothing matches, the command is logged and ignored.
+
+The command acts on **every** module with that name — those on screen (the persistent modules and the current layout) and those saved in your other layouts, which change as if you had edited them there. `toggle` flips each match on its own, so two same-named modules showing opposite states stay opposite.
 
 | Address |
 |---|
 | `/cuecapture/{id}/overlay/module/{ModuleName}/show` |
 | `/cuecapture/{id}/overlay/module/{ModuleName}/hide` |
 | `/cuecapture/{id}/overlay/module/{ModuleName}/toggle` |
+
+### Overlay layouts {#overlay-layouts}
+
+Switch the overlay to one of your saved layouts. Only the overlay changes — recording, sources and console connections carry on untouched.
+
+| Address | Args | Notes |
+|---|---|---|
+| `/cuecapture/{id}/overlay/layout/{Name}` | — | Path form. `_` stands for a space: `Act_Two` selects `Act Two`. |
+| `/cuecapture/{id}/overlay/layout` | 1 string | Arg form — the exact name, spaces and slashes included. A non-string arg is read as its text (`2` → `"2"`); any further args are ignored. |
+
+The name is matched case-insensitively and whitespace-trimmed; failing that, with each `_` read as a space; failing that, as a layout ID — copy it from the layout's row menu; unlike the name, it survives a rename. The literal name is tried first, so a layout whose real name contains an underscore still wins. Selecting the layout already showing does nothing.
+
+A command that can't be carried out changes nothing and is logged: without an **Overlay Layouts** license, for a name that matches no layout, or while a layout edit or canvas gesture is in progress. No upgrade prompt is shown — watch `/out/overlay/layout` to confirm a switch.
 
 ### Custom OSC overlay slots
 
@@ -473,6 +488,17 @@ The catalog above is the spec; the rest of this page is recipes. Pick the closes
 /cuecapture/1/overlay/module/Show_Notes/hide
 ```
 
+### Switching overlay layouts
+
+```
+# Switch to the layout named "Act Two" (path form — `_` for the space)
+/cuecapture/1/overlay/layout/Act_Two
+
+# The same, arg form — any name, spaces and slashes included
+#   address  = /cuecapture/1/overlay/layout
+#   string 1 = "Act Two"
+```
+
 ### Driving a Custom OSC overlay
 
 A **Custom OSC** module is a freeform 16-line text block. Drop one onto the modules panel, set its **Slot** number (1–32) in the properties panel, and you can push text from anywhere on the network.
@@ -505,15 +531,15 @@ A **Custom OSC** module is a freeform 16-line text block. Drop one onto the modu
 
 ### Driving CueCapture from an Eos macro
 
-If you've enabled **Use Eos Connection** in Settings → Integrations → OSC (only available on **User TCP Port** mode), an Eos macro can drive CueCapture by issuing an OSC string command. In Eos, an OSC string command in a macro looks like:
+On Eos 3.3.9 or newer, an Eos macro reaches CueCapture over the connection you already have. With the console connected on **Third Party OSC** (port 3038) and **Eos Passthrough** turned on in Settings → Integrations → OSC, the only thing to enter in the macro is the OSC string command:
 
 ```
 /cuecapture/1/recording/start
 ```
 
-Eos sends it over the existing TCP connection; CueCapture forwards it into the same dispatcher that handles UDP. No second connection needed.
+No UDP target and no second connection: Eos sends the string over the existing TCP connection, and CueCapture forwards it into the same dispatcher that handles UDP. The same holds on the **User TCP Port** method, on any Eos version.
 
-If you're on **Third Party OSC** (the default and recommended Eos connection), Eos won't transmit `/cuecapture/...` messages to us — point your macro at the UDP listener instead. The OSC settings panel lists this computer's addresses under **This Computer** so you know what address to put in the macro — use the one on the network the console shares with this computer.
+On a console older than 3.3.9 — **Third Party OSC** on port **3037**, including a 3038 connection that fell back to 3037 — Eos does not transmit `/cuecapture/...` strings over the console connection, so point the macro at the UDP listener instead. The OSC settings panel lists this computer's addresses under **This Computer**; use the one on the network the console shares with this computer, with the **UDP RX Port** (default `8001`).
 
 ### Driving from Companion or qLab
 
@@ -554,6 +580,7 @@ Stable state names so each Companion feedback pin maps to one durable state:
 - View: `"record"`, `"playback"`
 - Recording: `"recording"`, `"paused"`, `"stopped"`, `"fault"`, `"idle"`
 - Deck transport: `"playing"`, `"paused"`, `"stopped"`
+- Overlay layout: the layout's **name**. The arg form carries it exactly; the path form spells spaces and the reserved characters `/ # * , ? [ ] { }` as `_` (`Act Two` → `.../out/overlay/layout/Act_Two`).
 
 A Companion module that does not know the `"paused"` recording state keeps showing
 the state it last received until the recording resumes or stops.
@@ -630,7 +657,12 @@ the state it last received until the recording resumes or stops.
 /out/settings/showid                       args: <int>               # current show ID
 /out/settings/log-level                    args: "Information"       # application log level
 /out/shutdown/computer-allowed             args: "true" | "false"    # mirror of the OSC safety gate
+
+/out/overlay/layout                        args: "Act Two"           # the layout on screen; + path-form pair (/out/overlay/layout/Act_Two); also on rename
+/out/overlay/layouts                       args: "Layout 1", "Act Two", ...   # every layout name, in list order; re-sent when a layout is added, removed, renamed or reordered
 ```
+
+`/out/overlay/layouts` carries at most 64 names, and only as many as fit one 1400-byte message — the rest are left off the end.
 
 ### State snapshots
 
@@ -639,7 +671,7 @@ A full snapshot of the catalog is emitted whenever:
 1. A TX configuration is applied with TX enabled.
 2. CueCapture receives `/cuecapture/{id}/identify` or its broadcast form.
 
-Snapshot order: `identify` → `view` → `recording` → `recording/duration` (if recording) → `recording/last/*` (if a finished session exists) → each deck a–d in order (state, rate, cue, position, filename, mix block, follow block) → global Playback state (`active-deck`, `theatre`, `fullscreen`, panels, cue-list filters) → settings mirror (`showname`, `counter`, `showid`, `log-level`, `shutdown/computer-allowed`) → mixer channels in order.
+Snapshot order: `identify` → `view` → `recording` → `recording/duration` (if recording) → `recording/last/*` (if a finished session exists) → each deck a–d in order (state, rate, cue, position, filename, mix block, follow block) → global Playback state (`active-deck`, `theatre`, `fullscreen`, panels, cue-list filters) → settings mirror (`showname`, `counter`, `showid`, `log-level`, `shutdown/computer-allowed`) → mixer channels in order → overlay layout → overlay layout list.
 
 ### Cadence
 
@@ -648,7 +680,8 @@ Snapshot order: `identify` → `view` → `recording` → `recording/duration` (
 
 ### Not emitted
 
-- **Overlay state** — master visibility, per-module visibility, and slot/line text are deliberately one-way inbound only.
+- **Overlay state** — master visibility, per-module visibility, and slot/line text are deliberately one-way inbound only. The overlay **layout** is the exception (above).
+- **Other layout changes** — the startup layout, and moving or copying modules between layouts, publish nothing.
 - **Timeline zoom / pan** — continuous, and pan auto-follows the playhead during playback, so streaming them as feedback would flood the wire. Inbound-only.
 - **Scene jump** — a navigation action with no durable state; the active chapter is already reflected by `/out/playback/deck/{a-d}/cue`.
 - **Active Mix preset** — CueCapture reports the applied Mix values, not the last preset selected.
@@ -666,4 +699,4 @@ To smoke-test on the same Mac without a Companion config:
 
 - **Settings → Integrations → OSC** — the field reference for everything that controls inbound OSC and the new TX section.
 - **Modules → Custom OSC** — the overlay module that receives slot text.
-- **Connecting to an Eos Console** — the Eos TCP path that the **Use Eos Connection** toggle hooks into.
+- **Connecting to an Eos Console** — the Eos TCP path that the **Eos Passthrough** toggle hooks into.
